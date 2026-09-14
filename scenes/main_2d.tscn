@@ -1,0 +1,21 @@
+[gd_scene format=3 uid="uid://bicg830qwsw5o"]
+
+[ext_resource type="Script" uid="uid://d0nkdp6qycbcb" path="res://scripts/Main2D.cs" id="1_41ekw"]
+[ext_resource type="Texture2D" uid="uid://cqhssmb4p1etv" path="res://assets/atlas.png" id="1_jmhsh"]
+
+[sub_resource type="TileSetAtlasSource" id="TileSetAtlasSource_h1ad7"]
+texture = ExtResource("1_jmhsh")
+0:0/0 = 0
+1:0/0 = 0
+2:0/0 = 0
+
+[sub_resource type="TileSet" id="TileSet_41ekw"]
+sources/1 = SubResource("TileSetAtlasSource_h1ad7")
+
+[node name="Main2D" type="TileMapLayer" unique_id=1289342251]
+tile_set = SubResource("TileSet_41ekw")
+script = ExtResource("1_41ekw")
+MapSize = Vector2i(25, 25)
+GreenIndex = Vector2i(2, 0)
+BlueIndex = Vector2i(1, 0)
+metadata/_custom_type_script = "uid://d0nkdp6qycbcb"
