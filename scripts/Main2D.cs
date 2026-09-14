@@ -1,42 +1,15 @@
+using System;
 using System.Collections.Generic;
 using Godot;
 
 namespace WFC.scripts;
 
-public struct TilePossibilities
+[Flags]
+public enum TileColor
 {
-    public bool IsRedPossible;
-    public bool IsGreenPossible;
-    public bool IsBluePossible;
-
-    public bool IsCollapsed()
-    {
-        return OptionCount() == 1;
-    }
-
-    public bool HasCollapsedToRed()
-    {
-        return IsRedPossible && IsCollapsed();
-    }
-
-    public bool HasCollapsedToGreen()
-    {
-        return IsGreenPossible && IsCollapsed();
-    }
-
-    public bool HasCollapsedToBlue()
-    {
-        return IsBluePossible && IsCollapsed();
-    }
-
-    private int OptionCount()
-    {
-        var count = 0;
-        if (IsRedPossible) count++;
-        if (IsGreenPossible) count++;
-        if (IsBluePossible) count++;
-        return count;
-    }
+    Red = 1 << 0,
+    Green = 1 << 1,
+    Blue = 1 << 2,
 }
 
 [GlobalClass]
@@ -44,7 +17,7 @@ public partial class Main2D : TileMapLayer
 {
     [Export] public Vector2I MapSize = new(5, 5);
 
-    private TilePossibilities[] _tilePossibilities;
+    private TileColor[] _tilePossibilities;
 
     [Export] public Vector2I RedIndex;
     [Export] public Vector2I GreenIndex;
@@ -54,14 +27,7 @@ public partial class Main2D : TileMapLayer
     {
         InitTiles();
 
-        for (var x = 0; x < MapSize.X; x++)
-        {
-            for (var y = 0; y < MapSize.Y; y++)
-            {
-                if (!GetTile(x, y).IsCollapsed())
-                    WaveFunctionCollapse(new Vector2I(x, y));
-            }
-        }
+        PropagateWaveFunctionCollapse();
 
         DrawTiles();
     }
@@ -70,23 +36,41 @@ public partial class Main2D : TileMapLayer
     {
     }
 
+    private static bool IsTileCollapsed(TileColor color)
+    {
+        var remainingPossibilities = int.PopCount((int)color);
+        return remainingPossibilities == 1;
+    }
+
+    private void PropagateWaveFunctionCollapse()
+    {
+        for (var x = 0; x < MapSize.X; x++)
+        {
+            for (var y = 0; y < MapSize.Y; y++)
+            {
+                if (!IsTileCollapsed(GetTile(x, y)))
+                    WaveFunctionCollapse(new Vector2I(x, y));
+            }
+        }
+    }
+
     private void WaveFunctionCollapse(Vector2I startIndex)
     {
         var tile = GetTile(startIndex.X, startIndex.Y);
 
         var rng = new RandomNumberGenerator();
-        while (!tile.IsCollapsed())
+        while (!IsTileCollapsed(tile))
         {
             switch (rng.RandiRange(0, 2))
             {
                 case 0:
-                    tile.IsBluePossible = false;
+                    tile &= ~TileColor.Blue;
                     break;
                 case 1:
-                    tile.IsGreenPossible = false;
+                    tile &= ~TileColor.Green;
                     break;
                 case 2:
-                    tile.IsRedPossible = false;
+                    tile &= ~TileColor.Red;
                     break;
             }
         }
@@ -115,16 +99,11 @@ public partial class Main2D : TileMapLayer
 
     private void InitTiles()
     {
-        _tilePossibilities = new TilePossibilities[MapSize.X * MapSize.Y];
+        _tilePossibilities = new TileColor[MapSize.X * MapSize.Y];
 
         for (var i = 0; i < MapSize.X * MapSize.Y; i++)
         {
-            _tilePossibilities[i] = new TilePossibilities
-            {
-                IsRedPossible = true,
-                IsGreenPossible = true,
-                IsBluePossible = true,
-            };
+            _tilePossibilities[i] = TileColor.Red | TileColor.Green | TileColor.Blue;
         }
     }
 
@@ -136,45 +115,52 @@ public partial class Main2D : TileMapLayer
             {
                 var tile = GetTile(x, y);
 
-                if (!tile.IsCollapsed())
+                if (!IsTileCollapsed(tile))
                     continue;
 
-                if (tile.IsBluePossible)
-                    SetCell(new Vector2I(x, y), 1, BlueIndex);
-                else if (tile.IsRedPossible)
-                    SetCell(new Vector2I(x, y), 1, RedIndex);
-                else
-                    SetCell(new Vector2I(x, y), 1, GreenIndex);
+                switch (tile)
+                {
+                    case TileColor.Blue:
+                        SetCell(new Vector2I(x, y), 1, BlueIndex);
+                        break;
+                    case TileColor.Red:
+                        SetCell(new Vector2I(x, y), 1, RedIndex);
+                        break;
+                    case TileColor.Green:
+                    default:
+                        SetCell(new Vector2I(x, y), 1, GreenIndex);
+                        break;
+                }
             }
         }
     }
 
-    private void RecursivelyCollapse(TilePossibilities possibilities, Vector2I adjacentIndex, ref Queue<Vector2I> stack)
+    private void RecursivelyCollapse(TileColor possibilities, Vector2I adjacentIndex, ref Queue<Vector2I> stack)
     {
         var adjacentPossibility = GetTile(adjacentIndex.X, adjacentIndex.Y);
 
-        var wasCollapsed = adjacentPossibility.IsCollapsed();
+        var wasCollapsed = IsTileCollapsed(adjacentPossibility);
 
-        if (possibilities.HasCollapsedToRed())
-            adjacentPossibility.IsRedPossible = false;
-        if (possibilities.HasCollapsedToGreen())
-            adjacentPossibility.IsGreenPossible = false;
-        if (possibilities.HasCollapsedToBlue())
-            adjacentPossibility.IsBluePossible = false;
+        if (possibilities == TileColor.Red)
+            adjacentPossibility &= ~TileColor.Red;
+        if (possibilities == TileColor.Green)
+            adjacentPossibility &= ~TileColor.Green;
+        if (possibilities == TileColor.Blue)
+            adjacentPossibility &= ~TileColor.Blue;
 
         SetTile(adjacentIndex.X, adjacentIndex.Y, adjacentPossibility);
 
-        var isCollapsed = adjacentPossibility.IsCollapsed();
+        var isCollapsed = IsTileCollapsed(adjacentPossibility);
         if (!wasCollapsed && isCollapsed)
             stack.Enqueue(adjacentIndex);
     }
 
-    private TilePossibilities GetTile(int x, int y)
+    private TileColor GetTile(int x, int y)
     {
         return _tilePossibilities[y * MapSize.X + x];
     }
 
-    private void SetTile(int x, int y, TilePossibilities possibilities)
+    private void SetTile(int x, int y, TileColor possibilities)
     {
         _tilePossibilities[y * MapSize.X + x] = possibilities;
     }
