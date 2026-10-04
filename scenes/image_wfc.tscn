@@ -1,9 +1,10 @@
 [gd_scene format=3 uid="uid://cskcb0u2ua1ow"]
 
 [ext_resource type="Script" uid="uid://xwecfxxih4xy" path="res://scripts/ImageWfc.cs" id="1_4k40j"]
-[ext_resource type="Texture2D" uid="uid://bpbou4y7jb0jk" path="res://assets/base_tile_set.png" id="2_uq2u4"]
+[ext_resource type="Texture2D" uid="uid://c3ibku337ppv0" path="res://assets/512_tile_set.png" id="2_uq2u4"]
 
 [node name="ImageWfc" type="TileMapLayer" unique_id=155926737]
 script = ExtResource("1_4k40j")
+MapSize = Vector2i(25, 25)
 BaseTexture = ExtResource("2_uq2u4")
 metadata/_custom_type_script = "uid://xwecfxxih4xy"
