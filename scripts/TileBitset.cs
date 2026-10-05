@@ -47,7 +47,7 @@ public readonly struct TileBitset : IEquatable<TileBitset>
         return _words.All(t => t == 0);
     }
 
-    private int PopCount()
+    public int PopCount()
     {
         return _words.Sum(BitOperations.PopCount);
     }

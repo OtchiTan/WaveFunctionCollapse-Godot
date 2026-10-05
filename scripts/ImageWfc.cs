@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO.Hashing;
+using System.Linq;
 using Godot;
 
 namespace WFC.scripts;
@@ -11,6 +12,13 @@ struct ImageAdjacencyRuleSet
     public TileBitset Down;
     public TileBitset Right;
     public TileBitset Left;
+}
+
+struct ProbabilityWeight
+{
+    public int Low;
+    public int High;
+    public int Tile;
 }
 
 [GlobalClass]
@@ -24,6 +32,7 @@ public partial class ImageWfc : TileMapLayer
     private ImageAdjacencyRuleSet[] _constraints;
     private readonly RandomNumberGenerator _rng = new();
     private Dictionary<int, Vector2I> _tilesSet = new();
+    private Dictionary<int, int> _tileRatio = new();
     private int _uniqueTileCount;
 
     public override void _Ready()
@@ -128,7 +137,12 @@ public partial class ImageWfc : TileMapLayer
                         var b = basePixelData[pixelIndex + 2];
                         var a = basePixelData[pixelIndex + 3];
 
-                        if (a == 0) { r = 0; g = 0; b = 0; }
+                        if (a == 0)
+                        {
+                            r = 0;
+                            g = 0;
+                            b = 0;
+                        }
 
                         tileBytes[bufferIndex++] = r;
                         tileBytes[bufferIndex++] = g;
@@ -139,14 +153,17 @@ public partial class ImageWfc : TileMapLayer
 
                 var hash = XxHash3.HashToUInt64(tileBytes);
 
-                if (!tilesMap.ContainsKey(hash))
+                if (!tilesMap.TryGetValue(hash, out var value))
                 {
                     var newId = tilesMap.Count;
-                    tilesMap[hash] = newId;
+                    value = newId;
+                    tilesMap[hash] = value;
                     tileIdToRect[newId] = new Rect2I(regionLeft, regionTop, TileSize.X, TileSize.Y);
                 }
 
-                inputTilesIds[y * tiles.X + x] = tilesMap[hash];
+                _tileRatio.TryAdd(tilesMap[hash], 0);
+                _tileRatio[tilesMap[hash]] += 1;
+                inputTilesIds[y * tiles.X + x] = value;
             }
         }
 
@@ -170,20 +187,35 @@ public partial class ImageWfc : TileMapLayer
             {
                 var tileId = inputTilesIds[y * tiles.X + x];
 
-                var yUp = (y > 0) ? y - 1 : tiles.Y - 1;
-                var yDown = (y < tiles.Y - 1) ? y + 1 : 0;
-                var xLeft = (x > 0) ? x - 1 : tiles.X - 1;
-                var xRight = (x < tiles.X - 1) ? x + 1 : 0;
 
-                var topTileId = inputTilesIds[yUp * tiles.X + x];
-                var downTileId = inputTilesIds[yDown * tiles.X + x];
-                var leftTileId = inputTilesIds[y * tiles.X + xLeft];
-                var rightTileId = inputTilesIds[y * tiles.X + xRight];
+                if (x > 0)
+                {
+                    var xLeft = x - 1;
+                    var leftTileId = inputTilesIds[y * tiles.X + xLeft];
+                    _constraints[tileId].Left.SetBit(leftTileId);
+                }
 
-                _constraints[tileId].Up.SetBit(topTileId);
-                _constraints[tileId].Down.SetBit(downTileId);
-                _constraints[tileId].Left.SetBit(leftTileId);
-                _constraints[tileId].Right.SetBit(rightTileId);
+
+                if (x < tiles.X - 1)
+                {
+                    var xRight = x + 1;
+                    var rightTileId = inputTilesIds[y * tiles.X + xRight];
+                    _constraints[tileId].Right.SetBit(rightTileId);
+                }
+
+                if (y > 0)
+                {
+                    var yUp = y - 1;
+                    var topTileId = inputTilesIds[yUp * tiles.X + x];
+                    _constraints[tileId].Up.SetBit(topTileId);
+                }
+
+                if (y < tiles.Y - 1)
+                {
+                    var yDown = y + 1;
+                    var downTileId = inputTilesIds[yDown * tiles.X + x];
+                    _constraints[tileId].Down.SetBit(downTileId);
+                }
             }
         }
 
@@ -258,7 +290,7 @@ public partial class ImageWfc : TileMapLayer
 
     private void DrawTiles()
     {
-        List<int> activeBits = new();
+        List<int> activeBits = [];
 
         for (var x = 0; x < MapSize.X; x++)
         {
@@ -290,19 +322,43 @@ public partial class ImageWfc : TileMapLayer
         stack.Enqueue(adjacentIndex);
     }
 
-    private readonly List<int> _bitsBuffer = [];
-
     private TileBitset RandomlySelectPossibility(TileBitset possibilities)
     {
-        possibilities.GetActiveBits(_bitsBuffer);
+        var probabilities = new List<ProbabilityWeight>
+        {
+            Capacity = possibilities.PopCount()
+        };
 
-        if (_bitsBuffer.Count == 0) return new TileBitset(_uniqueTileCount);
+        var currentCount = 0;
 
-        var randomIndex = _rng.RandiRange(0, _bitsBuffer.Count - 1);
-        var chosenTileId = _bitsBuffer[randomIndex];
+        for (var i = 0; i < _uniqueTileCount; i++)
+        {
+            var tileBit = new TileBitset(_uniqueTileCount);
+            tileBit.SetBit(i);
+
+            if ((possibilities & tileBit).IsEmpty()) continue;
+
+            var weight = _tileRatio[i];
+            var w = new ProbabilityWeight
+            {
+                Low = currentCount,
+                High = currentCount + weight,
+                Tile = i
+            };
+            probabilities.Add(w);
+            currentCount += weight;
+        }
+
+        var randomValue = _rng.RandiRange(0, currentCount - 1);
+
+        var collapsedTile =
+            (from weight in probabilities
+                where randomValue >= weight.Low && randomValue <= weight.High
+                select weight.Tile).FirstOrDefault();
 
         var result = new TileBitset(_uniqueTileCount);
-        result.SetBit(chosenTileId);
+        result.SetBit(collapsedTile);
+
         return result;
     }
 
@@ -316,13 +372,13 @@ public partial class ImageWfc : TileMapLayer
             Right = new TileBitset(_uniqueTileCount)
         };
 
-        possibilities.GetActiveBits(_bitsBuffer);
 
-        for (var i = 0; i < _bitsBuffer.Count; i++)
+        List<int> bitsBuffer = [];
+
+        possibilities.GetActiveBits(bitsBuffer);
+
+        foreach (var validNeighbors in bitsBuffer.Select(tileId => _constraints[tileId]))
         {
-            var tileId = _bitsBuffer[i];
-            var validNeighbors = _constraints[tileId];
-
             ruleset.Up |= validNeighbors.Up;
             ruleset.Down |= validNeighbors.Down;
             ruleset.Left |= validNeighbors.Left;
