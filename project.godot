@@ -11,7 +11,7 @@ config_version=5
 [application]
 
 config/name="WFC"
-run/main_scene="uid://cskcb0u2ua1ow"
+run/main_scene="uid://vj5vbahyb2o7"
 config/features=PackedStringArray("4.7", "C#", "Forward Plus")
 config/icon="res://icon.svg"
 

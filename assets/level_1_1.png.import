@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://bd4nwe7g7ekp8"
-path="res://.godot/imported/Low Poly Pallette.png-cf6e1e7a37190bcd407db5940e5c3e6f.ctex"
+uid="uid://cdlmuyxcf7bc4"
+path="res://.godot/imported/level_1_1.png-e22cc338db04540af3d9240825bdcd74.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/Low Poly Pallette.png"
-dest_files=["res://.godot/imported/Low Poly Pallette.png-cf6e1e7a37190bcd407db5940e5c3e6f.ctex"]
+source_file="res://assets/level_1_1.png"
+dest_files=["res://.godot/imported/level_1_1.png-e22cc338db04540af3d9240825bdcd74.ctex"]
 
 [params]
 
