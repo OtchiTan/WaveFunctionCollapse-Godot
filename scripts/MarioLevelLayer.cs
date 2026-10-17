@@ -6,7 +6,7 @@ namespace WFC.scripts;
 /// TileMapLayer unique qui génère un niveau façon Super Mario Bros.
 /// L'atlas fait 6 x 6 tuiles de 16 px (voir la classe Tiles), ciel compris.
 /// </summary>
-public partial class MarioLevelLayer : TileMapLayer
+public partial class MarioLevelLayer : ImageTileMapLayer
 {
     [Export] public int AtlasSourceId { get; set; } = 0;
     [Export] public int LevelWidth { get; set; } = 224;
@@ -20,9 +20,8 @@ public partial class MarioLevelLayer : TileMapLayer
 
     public Level CurrentLevel { get; private set; }
 
-    public override void _Ready() => Generate();
 
-    public void Generate()
+    protected override void GenerateImage()
     {
         int seed = Seed != 0 ? Seed : System.Random.Shared.Next();
         Generate(LevelWidth, LevelHeight, seed, Difficulty);

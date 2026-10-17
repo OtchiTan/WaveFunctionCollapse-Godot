@@ -22,7 +22,7 @@ struct ProbabilityWeight
 }
 
 [GlobalClass]
-public partial class ImageWfc : TileMapLayer
+public partial class ImageWfc : ImageTileMapLayer
 {
     [Export] public Vector2I MapSize = new(5, 5);
     [Export] public Vector2I TileSize = new(32, 32);
@@ -35,7 +35,7 @@ public partial class ImageWfc : TileMapLayer
     private Dictionary<int, int> _tileRatio = new();
     private int _uniqueTileCount;
 
-    public override void _Ready()
+    protected override void GenerateImage()
     {
         _rng.Randomize();
 
@@ -48,13 +48,10 @@ public partial class ImageWfc : TileMapLayer
         GD.Print("Setup Tile Set");
         SetupTileSet();
 
-        for (var i = 0; i < 1000; i++)
-        {
-            DrawMap(i);
-        }
+        DrawMap();
     }
 
-    private void DrawMap(int index)
+    private void DrawMap()
     {
         InitTiles();
 
@@ -63,16 +60,13 @@ public partial class ImageWfc : TileMapLayer
 
         GD.Print("Draw tiles");
         DrawTiles();
-
-        GD.Print("Save map");
-        SaveTileMap($"res://exports/map_{index}.png");
     }
 
     public override void _Process(double delta)
     {
         if (Input.IsActionJustPressed("ui_reroll"))
         {
-            DrawMap(0);
+            DrawMap();
         }
     }
 
@@ -402,74 +396,5 @@ public partial class ImageWfc : TileMapLayer
     private void SetTile(int x, int y, TileBitset possibilities)
     {
         _tilePossibilities[y * MapSize.X + x] = possibilities;
-    }
-
-    public void SaveTileMap(string filename)
-    {
-        Rect2I used = GetUsedRect();
-        if (used.Size.X == 0 || used.Size.Y == 0)
-        {
-            GD.PrintErr("SaveTileMap : le TileMapLayer est vide.");
-            return;
-        }
-
-        Vector2I tileSize = TileSet.TileSize;
-        var result = Image.CreateEmpty(
-            used.Size.X * tileSize.X,
-            used.Size.Y * tileSize.Y,
-            false,
-            Image.Format.Rgba8);
-
-        for (int y = 0; y < used.Size.Y; y++)
-        {
-            for (int x = 0; x < used.Size.X; x++)
-            {
-                Vector2I cell = used.Position + new Vector2I(x, y);
-
-                int sourceId = GetCellSourceId(cell);
-                if (sourceId == -1)
-                    continue; // cellule vide
-
-                if (TileSet.GetSource(sourceId) is not TileSetAtlasSource atlas || atlas.Texture == null)
-                    continue;
-
-                Vector2I atlasCoords = GetCellAtlasCoords(cell);
-                int alternative = GetCellAlternativeTile(cell);
-
-                // Région de la tuile dans l'atlas
-                Rect2I region = atlas.GetTileTextureRegion(atlasCoords);
-
-                Image atlasImage = atlas.Texture.GetImage();
-                if (atlasImage.IsCompressed())
-                    atlasImage.Decompress();
-                atlasImage.Convert(Image.Format.Rgba8);
-
-                Image tileImage = atlasImage.GetRegion(region);
-
-                // Gestion des transformations (flip / transpose) de la tuile alternative
-                TileData data = atlas.GetTileData(atlasCoords, alternative);
-                if (data != null)
-                {
-                    if (data.Transpose)
-                    {
-                        // Transposition = rotation de 90° + flip horizontal
-                        tileImage.Rotate90(ClockDirection.Clockwise);
-                        tileImage.FlipX();
-                    }
-
-                    if (data.FlipH) tileImage.FlipX();
-                    if (data.FlipV) tileImage.FlipY();
-                }
-
-                result.BlitRect(
-                    tileImage,
-                    new Rect2I(Vector2I.Zero, tileImage.GetSize()),
-                    new Vector2I(x * tileSize.X, y * tileSize.Y));
-            }
-        }
-
-        Error err = result.SavePng(filename);
-        if (err != Error.Ok)
-            GD.PrintErr($"SaveTileMap : échec de l'enregistrement ({err}).");
     }
 }
