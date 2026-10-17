@@ -6,6 +6,5 @@
 
 [node name="ImageExporter" type="Node2D" unique_id=1209123573]
 script = ExtResource("1_23f35")
-ImageCount = 10
 ScenesToExport = [ExtResource("2_6t8ct"), ExtResource("3_aeg16")]
 metadata/_custom_type_script = "uid://bm7uh3l2eg8lb"
