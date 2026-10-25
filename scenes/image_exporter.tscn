@@ -2,9 +2,8 @@
 
 [ext_resource type="Script" uid="uid://bm7uh3l2eg8lb" path="res://scripts/ImageExporter.cs" id="1_23f35"]
 [ext_resource type="PackedScene" uid="uid://d3026m4hiu48f" path="res://scenes/mario_wfc.tscn" id="2_6t8ct"]
-[ext_resource type="PackedScene" uid="uid://vj5vbahyb2o7" path="res://scenes/mario_random_generator.tscn" id="3_aeg16"]
 
 [node name="ImageExporter" type="Node2D" unique_id=1209123573]
 script = ExtResource("1_23f35")
-ScenesToExport = [ExtResource("2_6t8ct"), ExtResource("3_aeg16")]
+ScenesToExport = [ExtResource("2_6t8ct")]
 metadata/_custom_type_script = "uid://bm7uh3l2eg8lb"
