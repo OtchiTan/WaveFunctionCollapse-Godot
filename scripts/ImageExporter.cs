@@ -17,7 +17,7 @@ public partial class ImageExporter : Node2D
 
     public override void _Ready()
     {
-        var dirAccess = DirAccess.Open("res://");
+        var dirAccess = DirAccess.Open("user://");
         int threads = MaxThreads > 0 ? MaxThreads : Math.Max(1, OS.GetProcessorCount());
         threads = Math.Min(threads, Math.Max(1, ImageCount));
 
@@ -49,7 +49,7 @@ public partial class ImageExporter : Node2D
                         // utile quand le temps de génération varie d'une image à l'autre.
                         while ((i = Interlocked.Increment(ref next)) < ImageCount)
                         {
-                            level.GenerateAndSave($"{folder}/map_{i}.png");
+                            level.GenerateAndSave($"user://{folder}/map_{i}.png");
                             int count = Interlocked.Increment(ref done);
                             if (count % 10 == 0)
                                 GD.Print($"{name} : {count}/{ImageCount}");

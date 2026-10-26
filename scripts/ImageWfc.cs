@@ -21,19 +21,19 @@ struct ProbabilityWeight
     public int Tile;
 }
 
+
+
 [GlobalClass]
 public partial class ImageWfc : ImageTileMapLayer
 {
-    private const int Wildcard = -1;
-
     [Export] public Vector2I TileSize = new(32, 32);
     [Export] public Texture2D BaseTexture;
 
 
-    [Export] public Texture2D[] StaticAssets = [];
+    [Export] public StaticAsset[] StaticAssets = [];
 
 
-    private Vector2I MapSize { get; set; }
+    public Vector2I MapSize { get; private set; }
 
     private TileBitset[] _tilePossibilities;
     private ImageAdjacencyRuleSet[] _constraints;
@@ -121,11 +121,9 @@ public partial class ImageWfc : ImageTileMapLayer
     }
 
 
-    private ulong HashTile(byte[] pixels, int imageWidth, int left, int top, Span<byte> buffer,
-        out bool fullyTransparent)
+    private ulong HashTile(byte[] pixels, int imageWidth, int left, int top, Span<byte> buffer)
     {
         var bufferIndex = 0;
-        fullyTransparent = true;
 
         for (var localY = 0; localY < TileSize.Y; ++localY)
         {
@@ -145,10 +143,6 @@ public partial class ImageWfc : ImageTileMapLayer
                     r = 0;
                     g = 0;
                     b = 0;
-                }
-                else
-                {
-                    fullyTransparent = false;
                 }
 
                 buffer[bufferIndex++] = r;
@@ -189,7 +183,7 @@ public partial class ImageWfc : ImageTileMapLayer
                 var regionLeft = x * TileSize.X;
                 var regionTop = y * TileSize.Y;
 
-                var hash = HashTile(basePixelData, imgWidth, regionLeft, regionTop, tileBytes, out _);
+                var hash = HashTile(basePixelData, imgWidth, regionLeft, regionTop, tileBytes);
 
                 if (!tilesMap.TryGetValue(hash, out var value))
                 {
@@ -208,7 +202,7 @@ public partial class ImageWfc : ImageTileMapLayer
         _uniqueTileCount = tilesMap.Count;
 
 
-        _pinnedTiles = FindStaticAssets(tilesMap, inputTilesIds, tiles);
+        _pinnedTiles = BuildPinnedTiles(inputTilesIds, tiles);
         _exclusiveTiles = ComputeExclusiveTiles(inputTilesIds, tiles);
         GD.Print($"Static tiles : {_pinnedTiles.Count} cells, {_exclusiveTiles.Count} exclusive tile(s)");
 
@@ -274,124 +268,53 @@ public partial class ImageWfc : ImageTileMapLayer
     }
 
 
-    private Dictionary<Vector2I, int> FindStaticAssets(Dictionary<ulong, int> tilesMap, int[] baseIds,
-        Vector2I baseTiles)
+    private Dictionary<Vector2I, int> BuildPinnedTiles(int[] baseIds, Vector2I baseTiles)
     {
         var pinned = new Dictionary<Vector2I, int>();
 
         if (StaticAssets == null || StaticAssets.Length == 0)
             return pinned;
 
-        Span<byte> tileBytes = stackalloc byte[TileSize.X * TileSize.Y * 4];
-
         for (var assetIndex = 0; assetIndex < StaticAssets.Length; assetIndex++)
         {
-            var texture = StaticAssets[assetIndex];
-            if (texture == null) continue;
+            var asset = StaticAssets[assetIndex];
+            if (asset == null) continue;
 
-            var assetName = string.IsNullOrEmpty(texture.ResourcePath)
-                ? $"#{assetIndex}"
-                : texture.ResourcePath;
+            var assetName = string.IsNullOrEmpty(asset.Name) ? $"#{assetIndex}" : asset.Name;
 
-            var image = GetRgba8Image(texture);
-            var cols = image.GetWidth() / TileSize.X;
-            var rows = image.GetHeight() / TileSize.Y;
+            var min = new Vector2I(Math.Min(asset.Min.X, asset.Max.X), Math.Min(asset.Min.Y, asset.Max.Y));
+            var max = new Vector2I(Math.Max(asset.Min.X, asset.Max.X), Math.Max(asset.Min.Y, asset.Max.Y));
 
-            if (cols == 0 || rows == 0)
+            var clampedMin = new Vector2I(Math.Max(min.X, 0), Math.Max(min.Y, 0));
+            var clampedMax = new Vector2I(Math.Min(max.X, baseTiles.X - 1), Math.Min(max.Y, baseTiles.Y - 1));
+
+            if (clampedMin.X > clampedMax.X || clampedMin.Y > clampedMax.Y)
             {
-                GD.PushWarning($"Static asset {assetName} is smaller than one tile, ignored");
+                GD.PushWarning(
+                    $"Static asset {assetName} ({min} - {max}) is outside the input image ({baseTiles} tiles), ignored");
                 continue;
             }
 
-            if (image.GetWidth() % TileSize.X != 0 || image.GetHeight() % TileSize.Y != 0)
+            if (clampedMin != min || clampedMax != max)
             {
-                GD.PushWarning($"Static asset {assetName} size is not a multiple of TileSize, extra pixels ignored");
+                GD.PushWarning(
+                    $"Static asset {assetName} ({min} - {max}) exceeds the input image ({baseTiles} tiles), clamped to {clampedMin} - {clampedMax}");
             }
 
-            var pixels = image.GetData();
-            var pattern = new int[cols * rows];
-            var valid = true;
-            var hasContent = false;
-
-            for (var ty = 0; ty < rows && valid; ty++)
+            for (var y = clampedMin.Y; y <= clampedMax.Y; y++)
             {
-                for (var tx = 0; tx < cols; tx++)
+                for (var x = clampedMin.X; x <= clampedMax.X; x++)
                 {
-                    var hash = HashTile(pixels, image.GetWidth(), tx * TileSize.X, ty * TileSize.Y, tileBytes,
-                        out var transparent);
-
-                    if (transparent)
-                    {
-                        pattern[ty * cols + tx] = Wildcard;
-                        continue;
-                    }
-
-                    hasContent = true;
-
-                    if (!tilesMap.TryGetValue(hash, out var tileId))
-                    {
-                        valid = false;
-                        break;
-                    }
-
-                    pattern[ty * cols + tx] = tileId;
+                    pinned[new Vector2I(x, y)] = baseIds[y * baseTiles.X + x];
                 }
             }
 
-            if (!valid || !hasContent)
-            {
-                GD.PushWarning($"Static asset {assetName} contains tiles that are not in the base image, ignored");
-                continue;
-            }
-
-            var matches = 0;
-
-            for (var by = 0; by <= baseTiles.Y - rows; by++)
-            {
-                for (var bx = 0; bx <= baseTiles.X - cols; bx++)
-                {
-                    if (!MatchesAt(baseIds, baseTiles.X, pattern, cols, rows, bx, by))
-                        continue;
-
-                    matches++;
-
-                    for (var ty = 0; ty < rows; ty++)
-                    {
-                        for (var tx = 0; tx < cols; tx++)
-                        {
-                            var id = pattern[ty * cols + tx];
-                            if (id == Wildcard) continue;
-
-                            pinned[new Vector2I(bx + tx, by + ty)] = id;
-                        }
-                    }
-                }
-            }
-
-            if (matches == 0)
-                GD.PushWarning($"Static asset {assetName} not found in the base image");
-            else
-                GD.Print($"Static asset {assetName} : {matches} occurrence(s)");
+            var width = clampedMax.X - clampedMin.X + 1;
+            var height = clampedMax.Y - clampedMin.Y + 1;
+            GD.Print($"Static asset {assetName} : {clampedMin} - {clampedMax} ({width * height} tile(s))");
         }
 
         return pinned;
-    }
-
-    private static bool MatchesAt(int[] baseIds, int baseWidth, int[] pattern, int cols, int rows, int bx, int by)
-    {
-        for (var ty = 0; ty < rows; ty++)
-        {
-            for (var tx = 0; tx < cols; tx++)
-            {
-                var expected = pattern[ty * cols + tx];
-                if (expected == Wildcard) continue;
-
-                if (baseIds[(by + ty) * baseWidth + bx + tx] != expected)
-                    return false;
-            }
-        }
-
-        return true;
     }
 
 
